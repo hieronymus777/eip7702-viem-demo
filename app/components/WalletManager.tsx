@@ -12,6 +12,7 @@ import {
 import { chains } from "../lib/chains";
 import {
   createWebAuthnCredential,
+  CreateWebAuthnCredentialReturnType,
   type P256Credential,
 } from "viem/account-abstraction";
 import {
@@ -132,11 +133,12 @@ export function WalletManager({
       });
 
       // Create a new passkey
-      // setStatus("Creating new passkey...");
-      // const passkey = await createWebAuthnCredential({
-      //   name: "Smart Wallet Owner",
-      // });
-      // onPasskeyStored(passkey);
+      let passkey: CreateWebAuthnCredentialReturnType | null = null;
+      if (process.env.NEXT_PUBLIC_ENABLE_PASSKEY === "true") {
+        setStatus("Creating new passkey...");
+        passkey = await createWebAuthnCredential({ name: "Smart Wallet Owner" });
+        onPasskeyStored(passkey);
+      }
 
       // Create initialization args with both passkey and relayer as owners
       // We include the relayer as owner only for the purposes of this demo, which allows the relayer
@@ -146,11 +148,13 @@ export function WalletManager({
       console.log("EOA same as relayer:", isEOASameAsRelayer, "EOA:", account.address, "Relayer:", process.env.NEXT_PUBLIC_RELAYER_ADDRESS);
       
       const initArgs = encodeInitializeArgs([
-        //passkey,
+        ...(passkey ? [passkey] : []),
         account.address,
          // Only adding relay as an owner so that it can move funds out of the wallet for testing.  Should not happen on prod
         ...(isEOASameAsRelayer ? [] : [(process.env.NEXT_PUBLIC_RELAYER_ADDRESS as Hex)]),
       ]);
+
+      console.log("initArgs", initArgs);
       const nonce = await getNonceFromTracker(publicClient, account.address);
       const chainId = chains[process.env.NEXT_PUBLIC_SELECTED_CHAIN as keyof typeof chains ?? "baseSepolia"].id;
 
@@ -169,9 +173,7 @@ export function WalletManager({
       // Sign the hash
       const signature = await signSetImplementation(userWallet, setImplementationHash);
 
-      console.log("Signature:", signature);
-
-      throw new Error("test");
+      console.log("setImplementationSignature", signature);
 
       // Create the authorization signature for EIP-7702
       setStatus("Creating authorization signature...");
@@ -180,6 +182,7 @@ export function WalletManager({
         executor: isEOASameAsRelayer ? account.address : undefined,
         //...(isEOASameAsRelayer && { sponsor: false }),
       });
+
       console.log("Authorization created:", authorization);
 
       // Submit the combined upgrade transaction
